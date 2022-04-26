@@ -1,0 +1,85 @@
+"""
+A script to query Tanzu Observability (Wavefront) metrics from a SaaS server and output the results to stdout,
+for consumption by other systems.
+
+Usage:
+  python wf_query.py -m <metric> -mlb <minutes_lookback> -s <wavefront_server> -t <wavefront_token>
+
+  metric: The metric you wish to fetch, e.g. cpu.idle
+  minutes_lookback: The number of minutes to lookback (from now) for the query.  Default is 2.
+  wavefront_server: Your Wavefront instance, e.g. https://YOURINSTANCE.wavefront.com
+                    May also be supplied by the ${WAVEFRONT_SERVER} environment variable
+  wavefront_token: Your API token from the Wavefront instance, available from https://YOURINSTANCE.wavefront.com/userprofile/apiaccess
+             May also be supplied by the ${WAVEFRONT_TOKEN} environment variable
+"""
+
+import wavefront_api_client
+import time
+import sys
+import os
+import traceback
+
+from argparse import ArgumentParser
+from wavefront_api_client.rest import ApiException
+
+WAVEFRONT_FORMAT = '"{metric}" {value} {epoch_s:d} source="{source}" {tags}'
+
+
+def wf_query(configuration, metric, num_minutes_lookback):
+    """
+    A function to query Wavefront for a metric's values.  See module docstring, or run command for usage.
+    """
+    # create an instance of the API class
+    api_instance = wavefront_api_client.QueryApi(wavefront_api_client.ApiClient(configuration))
+    q = 'ts({0})'.format(metric)
+    s = str(round(time.time()) - (60 * num_minutes_lookback))
+    g = 'm' # str | the granularity of the points returned
+    i = False # bool | whether series with only points that are outside of the query window will be returned (defaults to true) (optional)
+    auto_events = False # bool | whether events for sources included in the query will be automatically returned by the query (optional)
+    strict = True # bool | do not return points outside the query window [s;e), defaults to false (optional)
+    include_obsolete_metrics = False # bool | include metrics that have not been reporting recently, defaults to false (optional)
+    sorted = True # bool | sorts the output so that returned series are in order, defaults to false (optional) (default to false)
+    cached = True # bool | whether the query cache is used, defaults to true (optional) (default to true)
+
+    try:
+        # Perform a charting query against Wavefront servers that returns the appropriate points in the specified time window and granularity
+        api_response = api_instance.query_api(q, s, g, i=i, auto_events=auto_events, strict=strict, include_obsolete_metrics=include_obsolete_metrics, sorted=sorted, cached=cached)
+        if getattr(api_response, "timeseries", None) is None:
+            print("Metrics not found.  {}".format(api_response.warnings), file=sys.stderr)
+            return
+        for series in api_response.timeseries:
+            try:
+                for data in series.data:
+                    if hasattr(series, "tags"):
+                        tags = " ".join("{}={}".format(key, val) for (key, val) in series.tags.items())
+                    else:
+                        tags = ""
+                    print(WAVEFRONT_FORMAT.format(metric=series.label, value=data[1], epoch_s=int(data[0]), source=series.host, tags=tags))
+            except AttributeError as ef:
+                pass # Consider that the data was not present
+    except ApiException as e:
+        print("Exception when calling QueryApi->query_api: {} {}\n".format(e.status, e.reason), file=sys.stderr)
+
+
+if __name__ == "__main__":
+    parser = ArgumentParser()
+    parser.add_argument("-s", "--wavefront-server", dest="server",
+                        help="Your Wavefront instance, e.g. https://YOURINSTANCE.wavefront.com.  May also be supplied by the ${WAVEFRONT_SERVER} environment variable")
+    parser.add_argument("-t", "--wavefront-token", dest="token",
+                        help="Your Wavefront API token, available from https://YOURINSTANCE.wavefront.com/userprofile/apiaccess.  May also be supplied by the ${WAVEFRONT_TOKEN} environment variable")
+    parser.add_argument("-m", "--metric", dest="metric", required=True,
+                        help="The metric you wish to fetch, e.g. cpu.idle")
+    parser.add_argument("-mlb", "--minutes-lookback", dest="minutes_lookback",
+                        help="Number of minutes to look back in query, default is 2", default=2, type=int)
+    args = parser.parse_args()
+    try:
+        configuration = wavefront_api_client.Configuration()
+        configuration.host = os.environ.get("WAVEFRONT_SERVER", args.server)
+        if configuration.host is None:
+          print("INPUT ERROR: Must supply wavefront-server via either commandline or environment variable")
+        configuration.api_key['X-AUTH-TOKEN'] = os.environ.get("WAVEFRONT_TOKEN", args.token)
+        if configuration.api_key is None:
+          print("INPUT ERROR: Must supply wavefront-token via either commandline or environment variable")
+        wf_query(configuration, args.metric, args.minutes_lookback)
+    except Exception as e:
+        print("Exception when executing wf_query.py: %s\n" % repr(e), file=sys.stderr)
