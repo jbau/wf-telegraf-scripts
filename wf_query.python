@@ -11,6 +11,8 @@ Usage:
                     May also be supplied by the ${WAVEFRONT_SERVER} environment variable
   wavefront_token: Your API token from the Wavefront instance, available from https://YOURINSTANCE.wavefront.com/userprofile/apiaccess
              May also be supplied by the ${WAVEFRONT_TOKEN} environment variable
+  https_proxy: Your HTTPS Proxy URL, e.g. https://squid:3128
+                May also be supplied by the ${HTTPS_PROXY} environment variable
 """
 
 import wavefront_api_client
@@ -71,6 +73,8 @@ if __name__ == "__main__":
                         help="The metric you wish to fetch, e.g. cpu.idle")
     parser.add_argument("-mlb", "--minutes-lookback", dest="minutes_lookback",
                         help="Number of minutes to look back in query, default is 2", default=2, type=int)
+    parser.add_argument("-p", "--proxy", dest="https_proxy",
+                        help="Your Proxy URL to access the Internet")
     args = parser.parse_args()
     try:
         configuration = wavefront_api_client.Configuration()
@@ -80,6 +84,7 @@ if __name__ == "__main__":
         configuration.api_key['X-AUTH-TOKEN'] = os.environ.get("WAVEFRONT_TOKEN", args.token)
         if configuration.api_key is None:
           print("INPUT ERROR: Must supply wavefront-token via either commandline or environment variable")
+        configuration.proxy = os.environ.get("HTTPS_PROXY", args.https_proxy)
         wf_query(configuration, args.metric, args.minutes_lookback)
     except Exception as e:
         print("Exception when executing wf_query.py: %s\n" % repr(e), file=sys.stderr)
