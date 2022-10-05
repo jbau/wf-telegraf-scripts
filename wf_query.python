@@ -39,7 +39,7 @@ def wf_query(configuration, metric, num_minutes_lookback):
     i = False # bool | whether series with only points that are outside of the query window will be returned (defaults to true) (optional)
     auto_events = False # bool | whether events for sources included in the query will be automatically returned by the query (optional)
     strict = True # bool | do not return points outside the query window [s;e), defaults to false (optional)
-    include_obsolete_metrics = False # bool | include metrics that have not been reporting recently, defaults to false (optional)
+    include_obsolete_metrics = False # bool | include metrics that have not been repo\rting recently, defaults to false (optional)
     sorted = True # bool | sorts the output so that returned series are in order, defaults to false (optional) (default to false)
     cached = True # bool | whether the query cache is used, defaults to true (optional) (default to true)
 
@@ -53,7 +53,7 @@ def wf_query(configuration, metric, num_minutes_lookback):
             try:
                 for data in series.data:
                     if hasattr(series, "tags"):
-                        tags = " ".join("{}={}".format(key, val) for (key, val) in series.tags.items())
+                        tags = " ".join("{}=\"{}\"".format(key, val) for (key, val) in series.tags.items())
                     else:
                         tags = ""
                     print(WAVEFRONT_FORMAT.format(metric=series.label, value=data[1], epoch_s=int(data[0]), source=series.host, tags=tags))
