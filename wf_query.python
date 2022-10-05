@@ -53,7 +53,7 @@ def wf_query(configuration, metric, num_minutes_lookback):
             try:
                 for data in series.data:
                     if hasattr(series, "tags"):
-                        tags = " ".join("{}={}".format(key, val) for (key, val) in series.tags.items())
+                        tags = " ".join("{}=\"{}\"".format(key, val) for (key, val) in series.tags.items())
                     else:
                         tags = ""
                     print(WAVEFRONT_FORMAT.format(metric=series.label, value=data[1], epoch_s=int(data[0]), source=series.host, tags=tags))
